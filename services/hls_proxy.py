@@ -2465,6 +2465,16 @@ class HLSProxy:
                         stream=True,
                         allow_redirects=True
                     )
+                    target_sid = request.query.get("hls_sid")
+                    if is_manifest and target_sid and target_sid in self.hls_header_sessions:
+                        try:
+                            curl_cookies = curl_resp.cookies.get_dict()
+                            if curl_cookies:
+                                fresh_cookies_str = "; ".join([f"{k}={v}" for k, v in curl_cookies.items()])
+                                self.hls_header_sessions[target_sid]["Cookie"] = fresh_cookies_str
+                                logger.info(f"🔄 [Cookie Sync] Session {target_sid} updated from curl_cffi with {len(curl_cookies)} cookies")
+                        except Exception as ce:
+                            logger.error(f"❌ Failed to sync curl_cffi cookies: {ce}")
                     
                     class MockContent:
                         def __init__(self, c_resp): self.c_resp = c_resp
