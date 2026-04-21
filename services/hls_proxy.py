@@ -2419,11 +2419,23 @@ class HLSProxy:
                     if "user-agent" in curl_headers:
                         del curl_headers["user-agent"]
                     
-                    # ✅ FIX: Ensure Referer is set to ROOT for cccdn.net
-                    # Some CDNs prefer the base domain over the full page URL
+                    # Preserve extractor-provided Referer for cccdn.net.
+                    # Some streams require the exact movie page, not the site root.
                     if "cccdn.net" in stream_url:
-                        curl_headers["Referer"] = "https://cinemacity.cc/"
-                        curl_headers["Origin"] = "https://cinemacity.cc"
+                        referer_value = (
+                            curl_headers.get("Referer")
+                            or curl_headers.get("referer")
+                            or "https://cinemacity.cc/"
+                        )
+                        curl_headers["Referer"] = referer_value
+                        try:
+                            parsed_referer = urllib.parse.urlparse(referer_value)
+                            if parsed_referer.scheme and parsed_referer.netloc:
+                                curl_headers["Origin"] = f"{parsed_referer.scheme}://{parsed_referer.netloc}"
+                            else:
+                                curl_headers["Origin"] = "https://cinemacity.cc"
+                        except Exception:
+                            curl_headers["Origin"] = "https://cinemacity.cc"
                         curl_headers["Sec-Fetch-Site"] = "same-site"
                         curl_headers["Sec-Fetch-Mode"] = "cors"
                         curl_headers["Sec-Fetch-Dest"] = "empty"
