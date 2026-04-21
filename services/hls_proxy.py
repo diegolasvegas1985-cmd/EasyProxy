@@ -2559,7 +2559,11 @@ class HLSProxy:
                         return response
                     except Exception as e:
                         if "Connection lost" not in str(e) and "closing transport" not in str(e):
-                            logger.error(f"❌ Stream error: {e}")
+                            logger.error(
+                                "❌ Stream error [%s]: %r",
+                                type(e).__name__,
+                                e,
+                            )
                         return response
 
                 content_bytes = await resp.read()
@@ -2807,7 +2811,11 @@ class HLSProxy:
                 logger.info(f"ℹ️ Stream connection closed by client or server: {stream_url}")
                 return web.Response(text="Connection lost", status=499)
             
-            logger.error(f"❌ Generic error in stream proxy: {err_msg}")
+            logger.error(
+                "❌ Generic error in stream proxy [%s]: %r",
+                type(e).__name__,
+                e,
+            )
             return web.Response(text=f"Stream error: {err_msg}", status=500)
 
     async def handle_playlist_request(self, request):
