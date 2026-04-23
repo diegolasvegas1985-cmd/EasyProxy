@@ -39,6 +39,7 @@ from config import (
     TRANSPORT_ROUTES,
     get_proxy_for_url,
     get_ssl_setting_for_url,
+    get_connector_for_proxy,
     API_PASSWORD,
     check_password,
     MPD_MODE,
@@ -1891,68 +1892,72 @@ class HLSProxy:
             extractor = await self.get_extractor(
                 url, dict(request.headers), host=host_param
             )
-            result = await extractor.extract(url, **extractor_kwargs)
+            try:
+                result = await extractor.extract(url, **extractor_kwargs)
 
-            stream_url = result["destination_url"]
-            stream_headers = result.get("request_headers", {})
-            mediaflow_endpoint = result.get("mediaflow_endpoint", "hls_proxy")
+                stream_url = result["destination_url"]
+                stream_headers = result.get("request_headers", {})
+                mediaflow_endpoint = result.get("mediaflow_endpoint", "hls_proxy")
 
-            logger.info(
-                f"✅ Extraction success: {stream_url[:50]}... Endpoint: {mediaflow_endpoint}"
-            )
+                logger.info(
+                    f"✅ Extraction success: {stream_url[:50]}... Endpoint: {mediaflow_endpoint}"
+                )
 
-            # Costruisci l'URL del proxy per questo stream
-            scheme = request.headers.get("X-Forwarded-Proto", request.scheme)
-            host = request.headers.get("X-Forwarded-Host", request.host)
-            proxy_base = f"{scheme}://{host}"
+                # Costruisci l'URL del proxy per questo stream
+                scheme = request.headers.get("X-Forwarded-Proto", request.scheme)
+                host = request.headers.get("X-Forwarded-Host", request.host)
+                proxy_base = f"{scheme}://{host}"
 
-            # Determina l'endpoint corretto
-            endpoint = "/proxy/hls/manifest.m3u8"
+                # Determina l'endpoint corretto
+                endpoint = "/proxy/hls/manifest.m3u8"
             
-            # Check extension of the actual path, not the whole URL
-            path_lower = urllib.parse.urlparse(stream_url).path.lower()
-            is_direct_video = any(path_lower.endswith(ext) for ext in [".mp4", ".mkv", ".avi", ".mov", ".flv", ".wmv"])
+                # Check extension of the actual path, not the whole URL
+                path_lower = urllib.parse.urlparse(stream_url).path.lower()
+                is_direct_video = any(path_lower.endswith(ext) for ext in [".mp4", ".mkv", ".avi", ".mov", ".flv", ".wmv"])
             
-            if mediaflow_endpoint == "proxy_stream_endpoint" or is_direct_video:
-                endpoint = "/proxy/stream"
-            elif ".mpd" in path_lower or "manifest" in path_lower and "dash" in path_lower:
-                endpoint = "/proxy/mpd/manifest.m3u8"
+                if mediaflow_endpoint == "proxy_stream_endpoint" or is_direct_video:
+                    endpoint = "/proxy/stream"
+                elif ".mpd" in path_lower or "manifest" in path_lower and "dash" in path_lower:
+                    endpoint = "/proxy/mpd/manifest.m3u8"
 
-            encoded_url = urllib.parse.quote(stream_url, safe="")
-            header_params = "".join(
-                [
-                    f"&h_{urllib.parse.quote(key)}={urllib.parse.quote(value)}"
-                    for key, value in stream_headers.items()
-                ]
-            )
+                encoded_url = urllib.parse.quote(stream_url, safe="")
+                header_params = "".join(
+                    [
+                        f"&h_{urllib.parse.quote(key)}={urllib.parse.quote(value)}"
+                        for key, value in stream_headers.items()
+                    ]
+                )
 
-            # Aggiungi api_password se presente
-            api_password = request.query.get("api_password")
-            if api_password:
-                header_params += f"&api_password={api_password}"
+                # Aggiungi api_password se presente
+                api_password = request.query.get("api_password")
+                if api_password:
+                    header_params += f"&api_password={api_password}"
 
-            # 1. URL COMPLETO (Solo per il redirect)
-            full_proxy_url = f"{proxy_base}{endpoint}?d={encoded_url}{header_params}"
+                # 1. URL COMPLETO (Solo per il redirect)
+                full_proxy_url = f"{proxy_base}{endpoint}?d={encoded_url}{header_params}"
 
-            if redirect_stream:
-                logger.debug(f"↪️ Redirecting to: {full_proxy_url}")
-                return web.HTTPFound(full_proxy_url)
+                if redirect_stream:
+                    logger.debug(f"↪️ Redirecting to: {full_proxy_url}")
+                    return web.HTTPFound(full_proxy_url)
 
-            # 2. URL PULITO (Per il JSON stile MediaFlow)
-            q_params = {}
-            if api_password:
-                q_params["api_password"] = api_password
+                # 2. URL PULITO (Per il JSON stile MediaFlow)
+                q_params = {}
+                if api_password:
+                    q_params["api_password"] = api_password
 
-            response_data = {
-                "destination_url": stream_url,
-                "request_headers": stream_headers,
-                "mediaflow_endpoint": mediaflow_endpoint,
-                "mediaflow_proxy_url": f"{proxy_base}{endpoint}",
-                "query_params": q_params,
-            }
+                response_data = {
+                    "destination_url": stream_url,
+                    "request_headers": stream_headers,
+                    "mediaflow_endpoint": mediaflow_endpoint,
+                    "mediaflow_proxy_url": f"{proxy_base}{endpoint}",
+                    "query_params": q_params,
+                }
 
-            logger.info(f"✅ Extractor OK: {url} -> {stream_url[:50]}...")
-            return web.json_response(response_data)
+                logger.info(f"✅ Extractor OK: {url} -> {stream_url[:50]}...")
+                return web.json_response(response_data)
+            finally:
+                if hasattr(extractor, "close"):
+                    await extractor.close()
 
         except Exception as e:
             error_message = str(e).lower()
