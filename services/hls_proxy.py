@@ -755,7 +755,13 @@ class HLSProxy:
                 key = f"{host}_direct" if bypass_warp else host
                 
                 # ✅ FIX: Calcola il proxy corretto in base a bypass_warp invece di usare GLOBAL_PROXIES indiscriminatamente
-                proxy = get_proxy_for_url(host, TRANSPORT_ROUTES, GLOBAL_PROXIES, bypass_warp=bypass_warp)
+                proxy_lookup_target = url if host in ["doodstream", "dood", "d000d"] else host
+                proxy = get_proxy_for_url(
+                    proxy_lookup_target,
+                    TRANSPORT_ROUTES,
+                    GLOBAL_PROXIES,
+                    bypass_warp=bypass_warp,
+                )
                 proxy_list = [proxy] if proxy else []
 
                 if host == "vavoo":
@@ -1103,7 +1109,7 @@ class HLSProxy:
             ):
                 key = "doodstream_direct" if bypass_warp else "doodstream"
                 proxy = get_proxy_for_url(
-                    "doodstream", TRANSPORT_ROUTES, GLOBAL_PROXIES, bypass_warp=bypass_warp
+                    url, TRANSPORT_ROUTES, GLOBAL_PROXIES, bypass_warp=bypass_warp
                 )
                 proxy_list = [proxy] if proxy else []
                 if key not in self.extractors:
