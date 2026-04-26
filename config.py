@@ -316,6 +316,7 @@ if "MPD_MODE" in os.environ:
 # --- FlareSolverr Configuration ---
 FLARESOLVERR_URL = os.environ.get("FLARESOLVERR_URL", "http://localhost:8191").rstrip("/")
 FLARESOLVERR_TIMEOUT = int(os.environ.get("FLARESOLVERR_TIMEOUT", 30))
+FLARESOLVERR_WARM_SESSIONS = os.environ.get("FLARESOLVERR_WARM_SESSIONS", "false").lower() in ("true", "1", "yes")
 
 
 def check_password(request):
