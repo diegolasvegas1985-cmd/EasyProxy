@@ -28,7 +28,9 @@ LOG_LEVEL_MAP = {
 }
 LOG_LEVEL = LOG_LEVEL_MAP.get(LOG_LEVEL_STR, logging.WARNING)
 PROXY_TEST_TIMEOUT = int(os.environ.get("PROXY_TEST_TIMEOUT", "5"))
-PROXY_TEST_CONCURRENCY = max(1, int(os.environ.get("PROXY_TEST_CONCURRENCY", "60")))
+cpu_cores = os.cpu_count() or 4
+default_concurrency = 10 if cpu_cores == 1 else min(100, max(30, cpu_cores * 15))
+PROXY_TEST_CONCURRENCY = max(1, int(os.environ.get("PROXY_TEST_CONCURRENCY", str(default_concurrency))))
 
 logging.basicConfig(
     level=LOG_LEVEL,
