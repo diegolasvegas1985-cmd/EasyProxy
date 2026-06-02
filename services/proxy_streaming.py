@@ -577,6 +577,38 @@ class HLSProxyStreamingMixin:
                     logger.debug("Proxy rotation re-extract failed: %s", exc)
                 return None
 
+            async def retry_same_segment_after_payload_error(reason):
+                if not request.path.startswith("/proxy/hls/segment."):
+                    return None
+                retry_target = urllib.parse.unquote(stream_url) if is_special_cdn else yarl.URL(stream_url, encoded=True)
+                for attempt in range(2):
+                    await asyncio.sleep(0.15 * (attempt + 1))
+                    try:
+                        async with session.get(retry_target, headers=headers, ssl=not disable_ssl) as retry_resp:
+                            if retry_resp.status not in [200, 206]:
+                                logger.debug(
+                                    "Segment payload retry got status %s for %s",
+                                    retry_resp.status,
+                                    stream_url,
+                                )
+                                continue
+                            retry_body = await retry_resp.read()
+                            logger.info(
+                                "Recovered interrupted segment with same-proxy retry %d for %s (%s)",
+                                attempt + 1,
+                                stream_url,
+                                type(reason).__name__,
+                            )
+                            return retry_body, retry_resp.headers, retry_resp.status
+                    except (ClientPayloadError, ConnectionResetError, OSError, asyncio.TimeoutError) as exc:
+                        logger.debug(
+                            "Segment payload retry %d failed for %s: %r",
+                            attempt + 1,
+                            stream_url,
+                            exc,
+                        )
+                return None
+
             async with resp_ctx as resp:
                 content_type = resp.headers.get("content-type", "").lower()
 
@@ -678,7 +710,15 @@ class HLSProxyStreamingMixin:
                             )
                         return response
 
-                content_bytes = await resp.read()
+                response_source_headers = resp.headers
+                response_status = resp.status
+                try:
+                    content_bytes = await resp.read()
+                except (ClientPayloadError, ConnectionResetError, OSError) as e:
+                    retry_result = await retry_same_segment_after_payload_error(e)
+                    if not retry_result:
+                        raise
+                    content_bytes, response_source_headers, response_status = retry_result
                 manifest_content = None
                 try:
                     decoded_text = content_bytes.decode("utf-8", errors='replace')
@@ -879,8 +919,8 @@ class HLSProxyStreamingMixin:
                     "last-modified",
                     "etag",
                 ]:
-                    if header in resp.headers:
-                        response_headers[header] = resp.headers[header]
+                    if header in response_source_headers:
+                        response_headers[header] = response_source_headers[header]
 
                 # ✅ FIX: Forza Content-Type coerente se il server non lo invia correttamente
                 if (
@@ -927,7 +967,7 @@ class HLSProxyStreamingMixin:
 
                 return web.Response(
                     body=content_bytes,
-                    status=resp.status,
+                    status=response_status,
                     headers=response_headers,
                 )
 
